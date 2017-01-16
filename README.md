@@ -4,11 +4,13 @@ A library (and minimal pvoutput.org client) for interfacing with aurora protocol
 
 # Run the client
 To run the client:
+
 1. install rust
 2. Build the client with with
-```
-Cargo build --release
-```
+
+  ```
+  Cargo build --release
+  ```
 3. Modify `Config.toml` to match your setup.
 4.  - Run with:
       ```
