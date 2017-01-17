@@ -19,6 +19,7 @@ enum_primitive = "0.1.1"
 serde = "0.8.22"
 serde_derive = "0.8.22"
 error-chain = "0.7.2"
+mime = "0.2.2"
 
 [dependencies.toml]
 version = "0.2.1"

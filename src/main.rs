@@ -1,5 +1,5 @@
 #![feature(conservative_impl_trait)]
-extern crate aurora;
+extern crate aurora_rs;
 extern crate futures;
 extern crate tokio_core;
 extern crate tokio_service;
@@ -11,7 +11,10 @@ extern crate serde;
 extern crate serde_derive;
 extern crate toml;
 extern crate hyper;
+extern crate mime;
 extern crate chrono;
+
+use aurora_rs as aurora;
 
 use std::time::Duration;
 use std::net::SocketAddr;
@@ -25,9 +28,10 @@ use tokio_timer::{Timer,TimerError,Sleep};
 use chrono::{Local};
 
 use hyper::Method;
+use hyper::status::StatusCode;
 use hyper::client::Request as HttpRequest;
 
-use aurora::{AuroraProto,Request,Response,CumulativeDuration,MeasurementType};
+use aurora::{AuroraProto,Request,Response,CumulativeDuration,MeasurementType,ErrorKind};
 
 #[derive(Debug,Clone,Deserialize)]
 struct PvOutputConfig{
@@ -178,25 +182,35 @@ fn main(){
             .map_err(aurora::Error::from)
             //Convert values to requests
             .map(move |(cum_e,cur_v)|{
+                println!("{}Wh, {}V",cum_e,cur_v);
                 let mut req = HttpRequest::new(Method::Post,"http://pvoutput.org/service/r2/addstatus.jsp".parse().expect("Hardcoded url is invalid?"));
                 {
+                    use mime::{Mime,TopLevel,SubLevel};
+                    use hyper::header::*;
+
                     let headers = req.headers_mut();
                     headers.set_raw("X-Pvoutput-Apikey",cfg.pv_output.api_key.clone());
-                    headers.set_raw("X-Pvoutput-systemId",cfg.pv_output.system_id.clone());
+                    headers.set_raw("X-Pvoutput-SystemId",cfg.pv_output.system_id.clone());
+                    headers.set(ContentType(Mime(TopLevel::Application,SubLevel::WwwFormUrlEncoded,vec![])));
                 }
                 let now = Local::now();
                 let date = now.format("%Y%m%d");
                 let time = now.format("%H:%M");
                 let body = format!("d={}&t={}&v1={}&v6={}",date,time,cum_e,cur_v);
+                println!("Body: {}",body);
                 req.set_body(body);
-                println!("{}Wh, {}V",cum_e,cur_v);
                 req
             })
             //upload stream
             .fold(hyper::Client::new(&handle),move |client, request|{
+                println!("Uploading values");
                 client.request(request)
-                    .map(move |_|{
-                        client
+                    .map_err(aurora::Error::from)
+                    .and_then(move |res|{
+                        if res.status() != &StatusCode::Ok{
+                            write!(std::io::stderr(),"[WARNING]: Failed to upload status, continuing")
+                        }
+                        Ok(client)
                     })
             })
             .map(|_| ())
