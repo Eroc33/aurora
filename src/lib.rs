@@ -7,18 +7,12 @@ extern crate futures;
 extern crate tokio_core;
 extern crate tokio_proto;
 extern crate tokio_service;
-extern crate tokio_timer;
 extern crate crc16;
 extern crate byteorder;
 #[macro_use]
 extern crate enum_primitive;
-#[macro_use]
-extern crate error_chain;
-extern crate hyper;
 
 mod state_codes;
-pub mod errors;
-pub use errors::*;
 pub use state_codes::*;
 
 

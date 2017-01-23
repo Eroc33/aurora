@@ -4,5 +4,5 @@ poll_duration = { secs = 300, nanos = 0 }
 timeout_mul = 5
 
 [pv_output]
-system_id = "SYSTEM_ID"
-api_key = "API_KEY"
+system_id = "5317"
+api_key = "f09d0c397f0eae58e47f38bd957dfea698f09c1d"
