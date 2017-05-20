@@ -7,8 +7,10 @@ extern crate futures;
 extern crate tokio_core;
 extern crate tokio_proto;
 extern crate tokio_service;
+extern crate tokio_io;
 extern crate crc16;
 extern crate byteorder;
+extern crate bytes;
 #[macro_use]
 extern crate enum_primitive;
 
@@ -19,7 +21,9 @@ pub use state_codes::*;
 use std::io;
 use std::result::Result as StdResult;
 
-use tokio_core::io::{Codec, EasyBuf, Io, Framed};
+use tokio_io::codec::{Decoder,Encoder,Framed};
+use bytes::{BytesMut,BufMut,IntoBuf,Buf};
+use tokio_io::{AsyncRead,AsyncWrite};
 use tokio_proto::pipeline::ClientProto;
 use crc16::State;
 use byteorder::{BigEndian,ByteOrder};
@@ -112,16 +116,16 @@ pub struct AuroraCodec{
     last_request: Option<Request>,
 }
 
-impl Codec for AuroraCodec{
-    type In = Response;
-    type Out = (u8,Request);
-    fn decode(&mut self, buf: &mut EasyBuf) -> io::Result<Option<Self::In>>
+impl Decoder for AuroraCodec{
+    type Item = Response;
+    type Error = std::io::Error;
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error>
     {
         if buf.len() >= 8 {
-            let packet = buf.drain_to(8);
+            let packet = buf.split_to(9).into_buf();
             //CRC check
-            let data = &packet.as_slice()[0..6];
-            let crc_val = &packet.as_slice()[6..8];
+            let data = &packet.bytes()[0..6];
+            let crc_val = &packet.bytes()[6..8];
             let crc_calc = State::<AuroraCrc>::calculate(data);
             if crc_val != &[lo(crc_calc),hi(crc_calc)] {
                 return Err(io::Error::new(io::ErrorKind::Other,"CRC mismatch"))
@@ -173,8 +177,13 @@ impl Codec for AuroraCodec{
         }else{
             Ok(None)
         }
-    }
-    fn encode(&mut self, (addr,msg): Self::Out, buf: &mut Vec<u8>)-> io::Result<()>
+    }    
+}
+
+impl Encoder for AuroraCodec{
+    type Item = (u8,Request);
+    type Error = std::io::Error;
+    fn encode(&mut self, (addr,msg): Self::Item, buf: &mut BytesMut)-> Result<(),Self::Error>
     {
         let mut encoded:[u8;10] = [0;10];
         encoded[0] = addr;
@@ -211,7 +220,7 @@ impl Codec for AuroraCodec{
         encoded[8] = lo(crc);
         encoded[9] = hi(crc);
         self.last_request = Some(msg);
-        buf.extend_from_slice(&encoded);
+        buf.put_slice(&encoded);
         Ok(())
     }
 
@@ -219,7 +228,7 @@ impl Codec for AuroraCodec{
 
 pub struct AuroraProto;
 
-impl<T: Io + 'static> ClientProto<T> for AuroraProto{
+impl<T: AsyncRead + AsyncWrite + 'static> ClientProto<T> for AuroraProto{
     type Request = (u8,Request);
     type Response = Response;
     type Transport = Framed<T, AuroraCodec>;
